@@ -2,3 +2,5 @@
 .DS_Store
 .pyc
 __pycache__
+misc.ipynb
+movie_dataset.pickle
