@@ -816,3 +816,52 @@ class FiveInRow(Game):
         return display_board(image, board, boards, marker1, marker2, marker_size, colors[0], colors[1], interval)
 
 
+class MAB(Environment):
+    """Multi-Armed Bandit environnement.
+    
+    Parameters
+    ----------
+    distribution: string
+        Reward distribution (Bernoulli, Uniform or Gaussian)
+    params: list
+        List of parameters (one per action)
+        Example for Bernoulli (mean): [0.4, 0.5, 0.6]
+        Example for Uniform (low, high): [(-1, 1), (0, 1), (-1, 2)]
+        Example for Gaussian (mean, variance): [(0, 1), (1, 2), (-1, 1)]
+    """
+
+    def __init__(self, distribution='bernoulli', params=[0.4, 0.6]):        
+        if type(distribution) != str:
+            raise ValueError("The parameter 'distribution' must be a string: either 'bernoulli', 'uniform' or 'gaussian'.")
+        self.distribution = distribution.lower()
+        self.params = params
+         
+    @staticmethod
+    def get_states():
+        """Single state."""
+        return [None]
+    
+    def get_actions(self):
+        """One action per arm."""
+        actions = [action for action, _ in enumerate(self.params)]
+        return actions
+    
+    def get_reward(self, action):
+        """Random reward. The parameter depends on the action."""
+        if self.distribution == 'bernoulli':
+            return np.random.random() < self.params[action]
+        if self.distribution == 'uniform':
+            low, high = self.params[action]
+            return np.random.uniform(low, high)
+        if self.distribution in ['gaussian', 'normal']:
+            mean, std = self.params[action]
+            return np.random.normal(mean, std)
+        raise ValueError('Unknown distribution.')
+        
+    def get_model(self):
+        raise ValueError('Not available.')
+        
+    def step(self, action):
+        stop = False
+        reward = self.get_reward(action)
+        return reward, stop

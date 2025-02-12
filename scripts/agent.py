@@ -7,7 +7,6 @@ November 2024
 import numpy as np
 from collections import defaultdict
 
-
 class Agent:
     """Agent interacting with some environment.
     
@@ -254,3 +253,138 @@ class OnlineControl(OnlineEvaluation):
         probs, actions = policy(state)
         i = np.random.choice(len(actions), p=probs)
         return actions[i]
+    
+
+class Bandit(Agent):
+    """Bandit algorithm with random policy. 
+
+    Parameters
+    ----------
+    model : object of class MAB
+        The model.
+    init_value : float
+        Initial value of the action-value function.
+    init_count : int
+        Initial count of the action-count function.
+    """
+    
+    def __init__(self, model, init_value=0, init_count=0):
+        # if not isinstance(model, MAB):
+        #     raise ValueError('The model must be a multi-armed bandit.')
+        self.model = model
+        self.policy = self.random_policy
+        actions = model.get_actions()
+        self.values = len(actions) * [init_value]
+        self.counts = len(actions) * [init_count]
+
+    def get_actions(self, state=None):
+        """Get all possible actions."""
+        return self.model.get_actions()
+    
+    def get_episode(self, horizon=100):
+        """Get the rewards for an episode and update the values."""
+        state = None
+        rewards = []
+        for t in range(horizon):
+            action = self.get_action(state)
+            reward, _ = self.model.step(action)
+            rewards.append(reward)
+            self.counts[action] += 1
+            diff = reward - self.values[action]
+            # update by temporal difference
+            self.values[action] += diff / self.counts[action]
+        return rewards    
+    
+
+class Greedy(Bandit):
+    """Bandit algorithm with epsilon-greedy policy. 
+
+    Parameters
+    ----------
+    model : object of class MAB
+        The model.
+    epsilon : float in [0, 1]
+        Exploration rate.
+    init_value : float
+        Initial value of the action-value function.
+    init_count : int
+        Initial count of the action-count function.
+    """
+    
+    def __init__(self, model, epsilon=0.1, init_value=0, init_count=0):
+        super(Greedy, self).__init__(model, init_value, init_count) 
+        self.epsilon = epsilon
+
+    def get_action(self, state=None):
+        """Get action with eps-greedy policy."""
+        actions = self.get_actions()
+        if np.random.random() > self.epsilon:
+            # select the best action(s) with probability 1 - epsilon
+            values = np.array(self.values)
+            actions = np.flatnonzero(values==np.max(values))
+        return np.random.choice(actions)
+
+
+class UCB(Bandit):
+    """Bandit algorithm with UCB policy. 
+
+    Parameters
+    ----------
+    model : object of class MAB
+        The model.
+    const : float in [0, 1]
+        Multiplicative constant for the UCB bonus.
+    init_value : float
+        Initial value of the action-value function.
+    init_count : int
+        Initial count of the action-count function.
+    """
+    
+    def __init__(self, model, const=1, init_value=0, init_count=0):
+        super(UCB, self).__init__(model, init_value, init_count) 
+        self.const = const
+
+    def get_action(self, state=None):
+        """Get action with UCB policy."""
+        values = np.array(self.values)
+        counts = np.array(self.counts)
+        actions = self.get_actions()
+        # to be modified
+        # not visited actions
+        not_visited = np.flatnonzero(counts==0)
+        if len(not_visited):
+            return np.random.choice(not_visited)
+        # visited actions
+        ucb = values + self.const * np.sqrt(np.log(np.sum(counts)) / counts)
+        actions = np.flatnonzero(ucb==np.max(ucb))
+        return np.random.choice(actions)
+    
+
+class TS(Bandit):
+    """Bandit algorithm with Thompson sampling. 
+
+    Parameters
+    ----------
+    model : object of class MAB
+        The model.
+    """
+    
+    def __init__(self, model):
+        super(TS, self).__init__(model) 
+        self.distribution = model.distribution
+            
+    def get_action(self, state=None):
+        """Get action with TS policy."""
+        values = np.array(self.values)
+        counts = np.array(self.counts)
+        if self.distribution == 'bernoulli':
+            # to be modified
+            alpha = values * counts + 1
+            beta = counts - values * counts + 1
+            samples = np.random.beta(alpha, beta)
+        else:
+            # to be modified
+            mean = values * counts / (counts + 1)
+            std = 1 / np.sqrt(counts + 1)
+            samples = np.random.normal(mean, std)
+        return np.argmax(samples)
